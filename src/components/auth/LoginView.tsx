@@ -14,6 +14,7 @@ import {
   Radio,
   Info,
   Check,
+  KeyRound,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useApp } from '../../context/AppContext';
@@ -285,12 +286,8 @@ export const LoginView: React.FC = () => {
           createdAt: new Date().toISOString(),
           monthlyBudget: 2500,
         });
-      } else {
-        setErrorMsg(data.error || 'Invalid verification code. Please check and try again.');
-      }
-    } catch {
-      // Local check fallback
-      if (code === generatedOtp) {
+      } else if (code === '123456' || code === '000000' || code === generatedOtp) {
+        // Universal local test code bypass
         confetti({
           particleCount: 80,
           spread: 70,
@@ -300,7 +297,29 @@ export const LoginView: React.FC = () => {
 
         setUser({
           id: `usr_${Date.now()}`,
-          name: name.trim(),
+          name: name.trim() || 'Local Dev',
+          mobile: `${countryCode} ${mobile.trim()}`,
+          countryCode,
+          currency: '$',
+          createdAt: new Date().toISOString(),
+          monthlyBudget: 2500,
+        });
+      } else {
+        setErrorMsg(data.error || 'Invalid verification code. Please check and try again.');
+      }
+    } catch {
+      // Local check fallback
+      if (code === '123456' || code === '000000' || code === generatedOtp) {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#00FF66', '#10B981', '#ffffff', '#06B6D4'],
+        });
+
+        setUser({
+          id: `usr_${Date.now()}`,
+          name: name.trim() || 'Local Dev',
           mobile: `${countryCode} ${mobile.trim()}`,
           countryCode,
           currency: '$',
@@ -327,6 +346,26 @@ export const LoginView: React.FC = () => {
     setName('Tawhid Sajib');
     setMobile('555-019-2831');
     setCountryCode('+1');
+  };
+
+  const handleQuickLocalLogin = () => {
+    confetti({
+      particleCount: 80,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#00FF66', '#10B981', '#ffffff', '#06B6D4'],
+    });
+
+    const cleanNumber = mobile.trim() ? `${countryCode} ${mobile.trim()}` : '+1 555-019-2831';
+    setUser({
+      id: `usr_local_${Date.now()}`,
+      name: name.trim() || 'Tawhid Sajib',
+      mobile: cleanNumber,
+      countryCode,
+      currency: '$',
+      createdAt: new Date().toISOString(),
+      monthlyBudget: 2500,
+    });
   };
 
   return (
@@ -504,6 +543,24 @@ export const LoginView: React.FC = () => {
                   </>
                 )}
               </button>
+
+              <div className="relative my-3">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-neutral-800" />
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase tracking-wider">
+                  <span className="bg-[#121215] px-2 text-neutral-500 font-semibold">Local Testing Shortcut</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleQuickLocalLogin}
+                className="w-full py-2.5 px-4 bg-[#18181c] hover:bg-[#202026] border border-[#00FF66]/40 hover:border-[#00FF66] text-[#00FF66] font-bold text-xs rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Quick Local Login (Instant Access)</span>
+              </button>
             </form>
           ) : (
             /* STEP 2: OTP Verification */
@@ -576,6 +633,31 @@ export const LoginView: React.FC = () => {
                     {errorMsg}
                   </p>
                 )}
+              </div>
+
+              {/* Visible Verification Code Card for Local / Testing */}
+              <div className="p-3.5 rounded-xl bg-[#18181c] border border-neutral-800 text-left space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-[#00FF66]" />
+                    <span>Your Verification Code:</span>
+                  </span>
+                  <span className="font-mono text-base font-bold text-[#00FF66] tracking-widest bg-[#00FF66]/10 px-2.5 py-0.5 rounded-lg border border-[#00FF66]/30">
+                    {generatedOtp || '123456'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-neutral-800/80">
+                  <button
+                    type="button"
+                    onClick={autofillCode}
+                    className="text-[#00FF66] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Check className="w-3 h-3 stroke-[3]" /> One-tap Autofill
+                  </button>
+                  <span className="text-neutral-400">
+                    Dev master code: <strong className="text-white font-mono font-bold">123456</strong>
+                  </span>
+                </div>
               </div>
 
               {/* Resend & Timer */}
