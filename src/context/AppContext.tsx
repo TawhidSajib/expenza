@@ -34,6 +34,7 @@ import {
   getFirebaseConsoleUrl,
 } from '../firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { isAppOwner } from '../utils/owner';
 
 export interface FirebaseSyncStatus {
   connected: boolean;
@@ -47,6 +48,7 @@ export interface FirebaseSyncStatus {
 
 interface AppContextType {
   user: User | null;
+  isOwner: boolean;
   setUser: (user: User | null) => void;
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<User | null>;
@@ -144,6 +146,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const isGoogle = fbUser.providerData?.some((p) => p.providerId === 'google.com');
 
+        const userEmail = fbUser.email || firestoreProfile?.email || existingLocal?.email || '';
+        const isOwnerUser = isAppOwner({
+          id: fbUser.uid,
+          name: '',
+          email: userEmail,
+          currency: '$',
+          createdAt: '',
+          role: firestoreProfile?.role,
+          isOwner: firestoreProfile?.isOwner,
+        });
+
         const mergedUser: User = {
           id: fbUser.uid,
           name:
@@ -152,12 +165,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             existingLocal?.name ||
             fbUser.email?.split('@')[0] ||
             'Expenza User',
-          email: fbUser.email || firestoreProfile?.email || existingLocal?.email || '',
+          email: userEmail,
           photoURL: fbUser.photoURL || undefined,
           currency: firestoreProfile?.currency || existingLocal?.currency || '$',
           monthlyBudget: firestoreProfile?.monthlyBudget ?? existingLocal?.monthlyBudget ?? 2500,
           createdAt: firestoreProfile?.createdAt || existingLocal?.createdAt || new Date().toISOString(),
           authProvider: isGoogle ? 'google' : 'email',
+          role: isOwnerUser ? 'owner' : 'user',
+          isOwner: isOwnerUser,
         };
 
         setUserState(mergedUser);
@@ -264,15 +279,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const existingProfile = await getUserFromFirestore(fbUser.uid).catch(() => null);
 
+      const userEmail = fbUser.email || existingProfile?.email || '';
+      const isOwnerUser = isAppOwner({
+        id: fbUser.uid,
+        name: '',
+        email: userEmail,
+        currency: '$',
+        createdAt: '',
+        role: existingProfile?.role,
+        isOwner: existingProfile?.isOwner,
+      });
+
       const profile: User = {
         id: fbUser.uid,
         name: fbUser.displayName || existingProfile?.name || 'Google User',
-        email: fbUser.email || existingProfile?.email || '',
+        email: userEmail,
         photoURL: fbUser.photoURL || undefined,
         currency: existingProfile?.currency || '$',
         monthlyBudget: existingProfile?.monthlyBudget ?? 2500,
         createdAt: existingProfile?.createdAt || new Date().toISOString(),
         authProvider: 'google',
+        role: isOwnerUser ? 'owner' : 'user',
+        isOwner: isOwnerUser,
       };
 
       setUserState(profile);
@@ -307,14 +335,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await updateProfile(fbUser, { displayName: name.trim() }).catch(() => {});
       }
 
+      const userEmail = fbUser.email || email.trim();
+      const isOwnerUser = isAppOwner({
+        id: fbUser.uid,
+        name: '',
+        email: userEmail,
+        currency: '$',
+        createdAt: '',
+      });
+
       const profile: User = {
         id: fbUser.uid,
         name: name.trim() || fbUser.email?.split('@')[0] || 'Expenza User',
-        email: fbUser.email || email.trim(),
+        email: userEmail,
         currency: '$',
         monthlyBudget: 2500,
         createdAt: new Date().toISOString(),
         authProvider: 'email',
+        role: isOwnerUser ? 'owner' : 'user',
+        isOwner: isOwnerUser,
       };
 
       setUserState(profile);
@@ -346,6 +385,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const existingProfile = await getUserFromFirestore(fbUser.uid).catch(() => null);
 
+      const userEmail = fbUser.email || email.trim();
+      const isOwnerUser = isAppOwner({
+        id: fbUser.uid,
+        name: '',
+        email: userEmail,
+        currency: '$',
+        createdAt: '',
+        role: existingProfile?.role,
+        isOwner: existingProfile?.isOwner,
+      });
+
       const profile: User = {
         id: fbUser.uid,
         name:
@@ -353,12 +403,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           fbUser.displayName ||
           fbUser.email?.split('@')[0] ||
           'Expenza User',
-        email: fbUser.email || email.trim(),
+        email: userEmail,
         photoURL: fbUser.photoURL || undefined,
         currency: existingProfile?.currency || '$',
         monthlyBudget: existingProfile?.monthlyBudget ?? 2500,
         createdAt: existingProfile?.createdAt || new Date().toISOString(),
         authProvider: 'email',
+        role: isOwnerUser ? 'owner' : 'user',
+        isOwner: isOwnerUser,
       };
 
       setUserState(profile);
@@ -701,11 +753,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [filteredExpenses, totalFilteredAmount]);
 
   const currency = user?.currency || '$';
+  const isOwner = useMemo(() => isAppOwner(user), [user]);
 
   return (
     <AppContext.Provider
       value={{
         user,
+        isOwner,
         setUser,
         logout,
         signInWithGoogle,

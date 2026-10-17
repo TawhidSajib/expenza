@@ -46,6 +46,7 @@ const CURRENCIES = [
 export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
   const {
     user,
+    isOwner,
     logout,
     updateUserPreferences,
     seedDemoDataHandler,
@@ -148,7 +149,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 {user.name.charAt(0).toUpperCase()}
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">{user.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">{user.name}</h3>
+                  {isOwner && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      <ShieldCheck className="w-3 h-3 text-amber-400" />
+                      App Owner
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-neutral-400 font-mono flex items-center gap-1.5 mt-0.5">
                   <Mail className="w-3 h-3 text-[#00FF66]" />
                   <span>{user.email || user.mobile || 'Connected Account'}</span>
@@ -236,66 +245,71 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
               </button>
             </form>
 
-            {/* Cloud Storage: Firebase Firestore */}
-            <div className="p-4 rounded-xl bg-[#18181c] border border-neutral-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                    <Flame className="w-4 h-4" />
+            {/* Cloud Storage: Firebase Firestore (Restricted to App Owner / Creator only) */}
+            {isOwner && (
+              <div className="p-4 rounded-xl bg-[#18181c] border border-amber-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <Flame className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>Firebase Cloud Database</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                          Owner Access
+                        </span>
+                      </h4>
+                      <p className="text-[10px] text-neutral-400 font-mono">
+                        Project: <span className="text-amber-400">{firebaseStatus.projectId}</span>
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>Firebase Cloud Database</span>
-                    </h4>
-                    <p className="text-[10px] text-neutral-400 font-mono">
-                      Project: <span className="text-amber-400">{firebaseStatus.projectId}</span>
-                    </p>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] shadow-[0_0_6px_#00FF66] animate-pulse" />
+                    Firestore Live
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-neutral-300">
+                  All custom categories, expenses, and user profile data are saved and persisted in your Cloud Firestore database. You can directly browse documents in the Firebase console.
+                </p>
+
+                {firebaseStatus.lastSyncedAt && (
+                  <div className="text-[10px] text-neutral-400 font-mono">
+                    Last cloud sync: <span className="text-white">{firebaseStatus.lastSyncedAt}</span>
                   </div>
+                )}
+
+                {syncFeedback && (
+                  <div className="p-2 rounded-lg bg-[#00FF66]/10 border border-[#00FF66]/30 text-[#00FF66] text-xs font-medium">
+                    {syncFeedback}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleManualSync}
+                    disabled={isSyncing}
+                    className="py-2 px-3 rounded-xl bg-[#121215] hover:bg-[#202026] border border-neutral-700 hover:border-[#00FF66] text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-[#00FF66] ${isSyncing ? 'animate-spin' : ''}`} />
+                    <span>{isSyncing ? 'Syncing...' : 'Sync to Firebase'}</span>
+                  </button>
+
+                  <a
+                    href={firebaseStatus.consoleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500 text-amber-300 text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>View Data on Firebase</span>
+                  </a>
                 </div>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] shadow-[0_0_6px_#00FF66] animate-pulse" />
-                  Firestore Live
-                </span>
               </div>
-
-              <p className="text-[11px] text-neutral-300">
-                All custom categories, expenses, and user profile data are saved and persisted in your Cloud Firestore database. You can directly browse documents in the Firebase console.
-              </p>
-
-              {firebaseStatus.lastSyncedAt && (
-                <div className="text-[10px] text-neutral-400 font-mono">
-                  Last cloud sync: <span className="text-white">{firebaseStatus.lastSyncedAt}</span>
-                </div>
-              )}
-
-              {syncFeedback && (
-                <div className="p-2 rounded-lg bg-[#00FF66]/10 border border-[#00FF66]/30 text-[#00FF66] text-xs font-medium">
-                  {syncFeedback}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleManualSync}
-                  disabled={isSyncing}
-                  className="py-2 px-3 rounded-xl bg-[#121215] hover:bg-[#202026] border border-neutral-700 hover:border-[#00FF66] text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-[#00FF66] ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isSyncing ? 'Syncing...' : 'Sync to Firebase'}</span>
-                </button>
-
-                <a
-                  href={firebaseStatus.consoleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500 text-amber-300 text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>View Data on Firebase</span>
-                </a>
-              </div>
-            </div>
+            )}
 
             {/* Data Export (Excel & JSON) & Backup Recovery */}
             <div className="p-3.5 rounded-xl bg-[#18181c] border border-neutral-800 space-y-3">

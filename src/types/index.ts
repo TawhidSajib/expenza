@@ -17,6 +17,8 @@ export interface User {
   monthlyBudget?: number;
   photoURL?: string;
   authProvider?: 'google' | 'email' | 'demo';
+  role?: 'owner' | 'user';
+  isOwner?: boolean;
 }
 
 export interface Category {

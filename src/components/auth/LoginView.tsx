@@ -685,13 +685,6 @@ export const LoginView: React.FC = () => {
 
         {/* Database & Cloud status indicator */}
         <div className="mt-6 flex flex-col items-center gap-2 text-xs text-neutral-400">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#121215] border border-neutral-800 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-[#00FF66] animate-pulse" />
-            <Database className="w-3.5 h-3.5 text-[#00FF66]" />
-            <span className="font-mono text-[11px] text-neutral-300">
-              Firebase Firestore Active
-            </span>
-          </div>
           <div className="flex items-center gap-1.5 text-neutral-400 text-[11px]">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
             <span>Encrypted Authentication &amp; Firestore Data Isolation</span>

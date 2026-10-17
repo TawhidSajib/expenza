@@ -26,9 +26,19 @@ import {
 import firebaseConfig from '../firebase-applet-config.json';
 import { User, Category, Expense } from './types';
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: Required for named firestore database */
+// Initialize Firebase (works automatically with firebase-applet-config.json or Vercel environment variables)
+const activeConfig = {
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
+};
+
+const app = initializeApp(activeConfig);
+export const db = getFirestore(app, activeConfig.firestoreDatabaseId); /* CRITICAL: Required for named firestore database */
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
