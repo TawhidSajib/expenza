@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, User, Layers, BarChart2, ListOrdered, ShieldCheck, Menu, X, FileSpreadsheet } from 'lucide-react';
+import { Plus, User, Layers, BarChart2, ListOrdered, ShieldCheck, Menu, X, FileSpreadsheet, NotebookTabs } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface NavbarProps {
@@ -18,7 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-[#09090b]/90 backdrop-blur-md border-b border-neutral-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
-        {/* Zone 1: Single text element wordmark in display face */}
+        {/* Zone 1: Brand Logo with NotebookTabs */}
         <div className="flex items-center gap-3 shrink-0">
           <a
             href="/"
@@ -26,10 +26,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               e.preventDefault();
               setActiveTab('expenses');
             }}
-            className="text-xl font-extrabold tracking-tight text-white whitespace-nowrap shrink-0 flex items-center gap-1.5"
+            className="text-xl font-extrabold tracking-tight text-white whitespace-nowrap shrink-0 flex items-center gap-2 group cursor-pointer"
           >
-            <span>Expenza</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] shadow-[0_0_8px_#00FF66]" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00FF66]/20 to-[#00FF66]/5 border border-[#00FF66]/30 flex items-center justify-center text-[#00FF66] shadow-[0_0_15px_rgba(0,255,102,0.15)] group-hover:border-[#00FF66]/60 transition-colors">
+              <NotebookTabs className="w-4 h-4 text-[#00FF66]" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span>Expenza</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] shadow-[0_0_8px_#00FF66]" />
+            </div>
           </a>
         </div>
 
