@@ -7,7 +7,7 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  Flame,
+  NotebookTabs,
   CheckCircle2,
   AlertCircle,
   Database,
@@ -226,7 +226,7 @@ export const LoginView: React.FC = () => {
             whileTap={{ scale: 0.95 }}
             className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#00FF66]/20 via-[#00FF66]/10 to-transparent border border-[#00FF66]/30 mb-3 shadow-[0_0_30px_rgba(0,255,102,0.15)] cursor-pointer"
           >
-            <Flame className="w-7 h-7 text-[#00FF66]" />
+            <NotebookTabs className="w-7 h-7 text-[#00FF66]" />
           </motion.div>
           <h1 className="text-3xl font-black tracking-tight text-white flex items-center justify-center gap-2">
             Expenza
@@ -235,7 +235,7 @@ export const LoginView: React.FC = () => {
             </span>
           </h1>
           <p className="text-neutral-400 text-sm mt-1">
-            Personal expense tracking backed by Firebase Cloud
+            Smart expense tracking for everyday life
           </p>
         </div>
 

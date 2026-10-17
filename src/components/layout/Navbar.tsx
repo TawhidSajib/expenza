@@ -82,17 +82,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Zone 3: 1 primary action */}
         <div className="flex items-center gap-3 shrink-0">
-          {/* Firebase status indicator badge */}
-          <button
-            type="button"
-            onClick={onOpenProfile}
-            title={`Firebase Cloud Firestore (${firebaseStatus.projectId})`}
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#121215] border border-neutral-800 text-[11px] text-neutral-300 hover:text-white transition-colors cursor-pointer"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] shadow-[0_0_6px_#00FF66] animate-pulse" />
-            <span className="font-mono">Firebase Live</span>
-          </button>
-
           {/* Quick Excel export button */}
           <button
             type="button"

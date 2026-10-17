@@ -1,6 +1,6 @@
 {
   "name": "Expenza",
-  "description": "Fast, modern neon-green and black daily expense tracker with OTP verification, custom categories, and multi-period date filters.",
+  "description": "Fast, modern neon-green and black daily expense tracker with Google & email authentication, custom categories, Excel export, and multi-period analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
