@@ -1,20 +1,31 @@
-export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'upi_wallet' | 'bank_transfer' | 'other';
+export type PaymentMethod =
+  | 'cash'
+  | 'credit_card'
+  | 'debit_card'
+  | 'upi_wallet'
+  | 'bank_transfer'
+  | 'other';
 
 export interface User {
   id: string;
   name: string;
-  mobile: string;
-  countryCode: string;
+  email: string;
+  mobile?: string;
+  countryCode?: string;
   currency: string;
   createdAt: string;
   monthlyBudget?: number;
+  photoURL?: string;
+  authProvider?: 'google' | 'email' | 'demo';
 }
 
 export interface Category {
   id: string;
+  userId?: string;
   name: string;
   color: string;
   icon: string;
+  budget?: number;
   monthlyBudget?: number;
   description?: string;
   createdAt: string;
@@ -31,6 +42,7 @@ export interface Expense {
   paymentMethod: PaymentMethod;
   notes?: string;
   receiptNumber?: string;
+  reference?: string;
   createdAt: string;
 }
 

@@ -35,8 +35,8 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleDelete = (id: string) => {
-    const res = deleteCategory(id);
+  const handleDelete = async (id: string) => {
+    const res = await deleteCategory(id);
     if (!res.success) {
       setDeleteError(res.reason || 'Could not delete category');
     } else {

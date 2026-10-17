@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, User, Layers, BarChart2, ListOrdered, ShieldCheck, Menu, X } from 'lucide-react';
+import { Plus, User, Layers, BarChart2, ListOrdered, ShieldCheck, Menu, X, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface NavbarProps {
@@ -13,7 +13,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenProfile,
   onOpenCategoryManager,
 }) => {
-  const { user, activeTab, setActiveTab, dbStatus } = useApp();
+  const { user, activeTab, setActiveTab, firebaseStatus, exportExcel } = useApp();
 
   return (
     <header className="sticky top-0 z-40 bg-[#09090b]/90 backdrop-blur-md border-b border-neutral-800">
@@ -82,23 +82,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Zone 3: 1 primary action */}
         <div className="flex items-center gap-3 shrink-0">
-          {/* Database status indicator badge */}
+          {/* Firebase status indicator badge */}
           <button
             type="button"
             onClick={onOpenProfile}
-            title={
-              dbStatus.connected
-                ? `MongoDB Connected (${dbStatus.dbName})`
-                : 'Local Storage Active (Click to view MongoDB settings)'
-            }
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#121215] border border-neutral-800 text-[11px] text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            title={`Firebase Cloud Firestore (${firebaseStatus.projectId})`}
+            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#121215] border border-neutral-800 text-[11px] text-neutral-300 hover:text-white transition-colors cursor-pointer"
           >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                dbStatus.connected ? 'bg-[#00FF66] shadow-[0_0_6px_#00FF66]' : 'bg-neutral-500'
-              }`}
-            />
-            <span className="font-mono">{dbStatus.connected ? 'MongoDB Active' : 'Local Storage'}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] shadow-[0_0_6px_#00FF66] animate-pulse" />
+            <span className="font-mono">Firebase Live</span>
+          </button>
+
+          {/* Quick Excel export button */}
+          <button
+            type="button"
+            onClick={() => exportExcel(false)}
+            title="Download complete ledger in Microsoft Excel format (.xlsx)"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 text-xs font-semibold transition-all cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Export Excel</span>
           </button>
 
           <button

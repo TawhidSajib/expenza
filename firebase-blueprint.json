@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing name, contact number, preferences, and monthly budget.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user ID matching auth UID",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 100
+        },
+        "mobile": {
+          "type": "string",
+          "description": "User phone number with country code",
+          "maxLength": 30
+        },
+        "currency": {
+          "type": "string",
+          "description": "Default currency symbol",
+          "maxLength": 10
+        },
+        "monthlyBudget": {
+          "type": "number",
+          "description": "Target monthly spending budget in selected currency"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp in ISO string format"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp in ISO string format"
+        }
+      },
+      "required": ["id", "name", "currency"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Custom user-defined category for grouping expenses",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique category identifier",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of category owner",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Category display name",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "icon": {
+          "type": "string",
+          "description": "Lucide icon identifier",
+          "maxLength": 50
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex or theme color string",
+          "maxLength": 30
+        },
+        "budget": {
+          "type": "number",
+          "description": "Optional category-specific monthly budget"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional category description",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "userId", "name", "icon", "color"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Record of a daily monetary expense",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique expense identifier",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the user logging this expense",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "description": "Merchant or expense description",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "amount": {
+          "type": "number",
+          "description": "Numeric transaction amount"
+        },
+        "date": {
+          "type": "string",
+          "description": "Transaction date YYYY-MM-DD",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "ID of assigned category",
+          "maxLength": 128
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Payment channel used",
+          "maxLength": 50
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional contextual notes",
+          "maxLength": 500
+        },
+        "reference": {
+          "type": "string",
+          "description": "Optional invoice or receipt reference number",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "userId", "title", "amount", "date", "categoryId", "paymentMethod"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile with display name, currency, and budget preferences."
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Custom user-defined expense categories."
+    },
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Individual daily expense entries logged by the user."
+    }
+  }
+}

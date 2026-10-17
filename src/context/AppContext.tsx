@@ -11,29 +11,58 @@ import {
   exportDataBackup,
   ExpenzaBackupData,
 } from '../utils/storage';
+import { exportToExcel } from '../utils/exportExcel';
 import { getTodayDateString } from '../utils/formatters';
+import {
+  auth,
+  googleProvider,
+  signInWithPopup,
+  fbSignOut,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+  saveUserToFirestore,
+  getUserFromFirestore,
+  saveCategoryToFirestore,
+  deleteCategoryFromFirestore,
+  saveExpenseToFirestore,
+  deleteExpenseFromFirestore,
+  subscribeToCategories,
+  subscribeToExpenses,
+  getFirebaseConsoleUrl,
+} from '../firebase';
+import firebaseConfig from '../../firebase-applet-config.json';
 
-export interface DbStatus {
+export interface FirebaseSyncStatus {
   connected: boolean;
-  uriConfigured: boolean;
-  dbName: string;
+  projectId: string;
+  databaseId: string;
+  consoleUrl: string;
+  isSyncing: boolean;
+  lastSyncedAt: string | null;
   error?: string | null;
 }
 
 interface AppContextType {
   user: User | null;
   setUser: (user: User | null) => void;
-  logout: () => void;
-  dbStatus: DbStatus;
-  syncWithMongo: () => Promise<boolean>;
+  logout: () => Promise<void>;
+  signInWithGoogle: () => Promise<User | null>;
+  signUpWithEmail: (name: string, email: string, password: string) => Promise<User>;
+  signInWithEmail: (email: string, password: string) => Promise<User>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  firebaseStatus: FirebaseSyncStatus;
+  syncWithFirebase: () => Promise<boolean>;
   categories: Category[];
-  addCategory: (cat: Omit<Category, 'id' | 'createdAt'>) => Category;
-  updateCategory: (id: string, updates: Partial<Category>) => void;
-  deleteCategory: (id: string) => { success: boolean; reason?: string };
+  addCategory: (cat: Omit<Category, 'id' | 'createdAt'>) => Promise<Category>;
+  updateCategory: (id: string, updates: Partial<Category>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<{ success: boolean; reason?: string }>;
   expenses: Expense[];
-  addExpense: (exp: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Expense;
-  updateExpense: (id: string, updates: Partial<Expense>) => void;
-  deleteExpense: (id: string) => void;
+  addExpense: (exp: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Promise<Expense>;
+  updateExpense: (id: string, updates: Partial<Expense>) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
   filterState: FilterState;
   setFilterState: React.Dispatch<React.SetStateAction<FilterState>>;
   resetFilters: () => void;
@@ -41,11 +70,12 @@ interface AppContextType {
   totalFilteredAmount: number;
   averageDailyAmount: number;
   currency: string;
-  updateUserPreferences: (prefs: Partial<User>) => void;
-  seedDemoDataHandler: () => void;
-  clearUserData: () => void;
+  updateUserPreferences: (prefs: Partial<User>) => Promise<void>;
+  seedDemoDataHandler: () => Promise<void>;
+  clearUserData: (clearCategories?: boolean) => Promise<void>;
+  exportExcel: (filteredOnly?: boolean) => void;
   exportBackup: () => void;
-  importBackup: (backupData: any) => boolean;
+  importBackup: (backupData: any) => Promise<boolean>;
   activeTab: 'expenses' | 'analytics' | 'categories';
   setActiveTab: (tab: 'expenses' | 'analytics' | 'categories') => void;
   isAddExpenseOpen: boolean;
@@ -94,143 +124,342 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     sortBy: 'date_desc',
   });
 
-  const [dbStatus, setDbStatus] = useState<DbStatus>({
-    connected: false,
-    uriConfigured: false,
-    dbName: 'expenza',
+  const [firebaseStatus, setFirebaseStatus] = useState<FirebaseSyncStatus>({
+    connected: true,
+    projectId: firebaseConfig.projectId,
+    databaseId: firebaseConfig.firestoreDatabaseId,
+    consoleUrl: getFirebaseConsoleUrl(),
+    isSyncing: false,
+    lastSyncedAt: null,
     error: null,
   });
 
-  const checkDbStatus = async () => {
-    try {
-      const res = await fetch('/api/db-status');
-      if (res.ok) {
-        const data = await res.json();
-        setDbStatus(data);
-      }
-    } catch {
-      // offline
-    }
-  };
-
+  // Track Firebase Auth state changes
   useEffect(() => {
-    checkDbStatus();
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        // Authenticated with Firebase
+        const existingLocal = getStoredUser();
+        const firestoreProfile = await getUserFromFirestore(fbUser.uid).catch(() => null);
+
+        const isGoogle = fbUser.providerData?.some((p) => p.providerId === 'google.com');
+
+        const mergedUser: User = {
+          id: fbUser.uid,
+          name:
+            fbUser.displayName ||
+            firestoreProfile?.name ||
+            existingLocal?.name ||
+            fbUser.email?.split('@')[0] ||
+            'Expenza User',
+          email: fbUser.email || firestoreProfile?.email || existingLocal?.email || '',
+          photoURL: fbUser.photoURL || undefined,
+          currency: firestoreProfile?.currency || existingLocal?.currency || '$',
+          monthlyBudget: firestoreProfile?.monthlyBudget ?? existingLocal?.monthlyBudget ?? 2500,
+          createdAt: firestoreProfile?.createdAt || existingLocal?.createdAt || new Date().toISOString(),
+          authProvider: isGoogle ? 'google' : 'email',
+        };
+
+        setUserState(mergedUser);
+        setStoredUser(mergedUser);
+
+        // Save profile in Firestore to ensure it's synced
+        saveUserToFirestore(mergedUser).catch(console.warn);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Load user data on change of user state and hydrate from MongoDB if connected
+  // Listen to Firestore real-time collections when user is active
   useEffect(() => {
-    if (user) {
-      const storedCats = getStoredCategories(user.id);
-      const storedExps = getStoredExpenses(user.id);
-      setCategories(storedCats);
-      setExpenses(storedExps);
-
-      // Hydrate from MongoDB remote collections
-      fetch(`/api/user-data?userId=${user.id}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((remoteData) => {
-          if (remoteData && remoteData.fromMongo) {
-            if (Array.isArray(remoteData.categories) && remoteData.categories.length > 0) {
-              setCategories(remoteData.categories);
-              setStoredCategories(user.id, remoteData.categories);
-            }
-            if (Array.isArray(remoteData.expenses) && remoteData.expenses.length > 0) {
-              setExpenses(remoteData.expenses);
-              setStoredExpenses(user.id, remoteData.expenses);
-            }
-            if (remoteData.user) {
-              updateUserPreferences({
-                name: remoteData.user.name || user.name,
-                currency: remoteData.user.currency || user.currency,
-                monthlyBudget: remoteData.user.monthlyBudget ?? user.monthlyBudget,
-              });
-            }
-          }
-        })
-        .catch(() => {});
-    } else {
+    if (!user) {
       setCategories([]);
       setExpenses([]);
+      return;
     }
+
+    // Hydrate local cache first (starts empty for new user profiles)
+    const storedCats = getStoredCategories(user.id);
+    const storedExps = getStoredExpenses(user.id);
+    setCategories(storedCats);
+    setExpenses(storedExps);
+
+    // Attach real-time snapshot listeners to Firestore if authenticated with Firebase
+    let unsubCats: (() => void) | undefined;
+    let unsubExps: (() => void) | undefined;
+
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      setFirebaseStatus((prev) => ({ ...prev, isSyncing: true }));
+
+      unsubCats = subscribeToCategories(
+        user.id,
+        (remoteCats) => {
+          const list = remoteCats || [];
+          setCategories(list);
+          setStoredCategories(user.id, list);
+          setFirebaseStatus((prev) => ({
+            ...prev,
+            isSyncing: false,
+            lastSyncedAt: new Date().toLocaleTimeString(),
+            error: null,
+          }));
+        },
+        (err) => {
+          setFirebaseStatus((prev) => ({ ...prev, isSyncing: false, error: err?.message || 'Sync error' }));
+        }
+      );
+
+      unsubExps = subscribeToExpenses(
+        user.id,
+        (remoteExps) => {
+          const list = remoteExps || [];
+          setExpenses(list);
+          setStoredExpenses(user.id, list);
+          setFirebaseStatus((prev) => ({
+            ...prev,
+            isSyncing: false,
+            lastSyncedAt: new Date().toLocaleTimeString(),
+            error: null,
+          }));
+        },
+        (err) => {
+          setFirebaseStatus((prev) => ({ ...prev, isSyncing: false, error: err?.message || 'Sync error' }));
+        }
+      );
+    }
+
+    return () => {
+      if (unsubCats) unsubCats();
+      if (unsubExps) unsubExps();
+    };
   }, [user?.id]);
 
   const setUser = (newUser: User | null) => {
     setUserState(newUser);
     setStoredUser(newUser);
+    if (newUser && auth.currentUser && auth.currentUser.uid === newUser.id) {
+      saveUserToFirestore(newUser).catch(console.warn);
+    }
   };
 
-  const logout = () => {
-    setUser(null);
+  const logout = async () => {
+    try {
+      await fbSignOut(auth);
+    } catch {
+      // ignore
+    }
+    setUserState(null);
+    setStoredUser(null);
+    setCategories([]);
+    setExpenses([]);
   };
 
-  const updateUserPreferences = (prefs: Partial<User>) => {
+  // Google Sign-In
+  const signInWithGoogle = async (): Promise<User | null> => {
+    try {
+      setFirebaseStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
+      const result = await signInWithPopup(auth, googleProvider);
+      const fbUser = result.user;
+
+      const existingProfile = await getUserFromFirestore(fbUser.uid).catch(() => null);
+
+      const profile: User = {
+        id: fbUser.uid,
+        name: fbUser.displayName || existingProfile?.name || 'Google User',
+        email: fbUser.email || existingProfile?.email || '',
+        photoURL: fbUser.photoURL || undefined,
+        currency: existingProfile?.currency || '$',
+        monthlyBudget: existingProfile?.monthlyBudget ?? 2500,
+        createdAt: existingProfile?.createdAt || new Date().toISOString(),
+        authProvider: 'google',
+      };
+
+      setUserState(profile);
+      setStoredUser(profile);
+      await saveUserToFirestore(profile);
+
+      setFirebaseStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        lastSyncedAt: new Date().toLocaleTimeString(),
+      }));
+      return profile;
+    } catch (err: any) {
+      setFirebaseStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        error: err.message || 'Google sign-in failed',
+      }));
+      throw err;
+    }
+  };
+
+  // Email & Password Sign Up
+  const signUpWithEmail = async (name: string, email: string, password: string): Promise<User> => {
+    try {
+      setFirebaseStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const fbUser = cred.user;
+
+      // Update Firebase Auth profile displayName
+      if (name.trim()) {
+        await updateProfile(fbUser, { displayName: name.trim() }).catch(() => {});
+      }
+
+      const profile: User = {
+        id: fbUser.uid,
+        name: name.trim() || fbUser.email?.split('@')[0] || 'Expenza User',
+        email: fbUser.email || email.trim(),
+        currency: '$',
+        monthlyBudget: 2500,
+        createdAt: new Date().toISOString(),
+        authProvider: 'email',
+      };
+
+      setUserState(profile);
+      setStoredUser(profile);
+      await saveUserToFirestore(profile);
+
+      setFirebaseStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        lastSyncedAt: new Date().toLocaleTimeString(),
+      }));
+      return profile;
+    } catch (err: any) {
+      setFirebaseStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        error: err.message || 'Sign up failed',
+      }));
+      throw err;
+    }
+  };
+
+  // Email & Password Sign In
+  const signInWithEmail = async (email: string, password: string): Promise<User> => {
+    try {
+      setFirebaseStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const fbUser = cred.user;
+
+      const existingProfile = await getUserFromFirestore(fbUser.uid).catch(() => null);
+
+      const profile: User = {
+        id: fbUser.uid,
+        name:
+          existingProfile?.name ||
+          fbUser.displayName ||
+          fbUser.email?.split('@')[0] ||
+          'Expenza User',
+        email: fbUser.email || email.trim(),
+        photoURL: fbUser.photoURL || undefined,
+        currency: existingProfile?.currency || '$',
+        monthlyBudget: existingProfile?.monthlyBudget ?? 2500,
+        createdAt: existingProfile?.createdAt || new Date().toISOString(),
+        authProvider: 'email',
+      };
+
+      setUserState(profile);
+      setStoredUser(profile);
+      await saveUserToFirestore(profile);
+
+      setFirebaseStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        lastSyncedAt: new Date().toLocaleTimeString(),
+      }));
+      return profile;
+    } catch (err: any) {
+      setFirebaseStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        error: err.message || 'Login failed',
+      }));
+      throw err;
+    }
+  };
+
+  // Password Reset Email
+  const sendPasswordReset = async (email: string): Promise<void> => {
+    await sendPasswordResetEmail(auth, email.trim());
+  };
+
+  const updateUserPreferences = async (prefs: Partial<User>) => {
     if (!user) return;
     const updated = { ...user, ...prefs };
-    setUser(updated);
-    fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, user: updated }),
-    }).catch(() => {});
+    setUserState(updated);
+    setStoredUser(updated);
+
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      await saveUserToFirestore(updated).catch(console.warn);
+    }
   };
 
-  const addCategory = (catData: Omit<Category, 'id' | 'createdAt'>): Category => {
+  const addCategory = async (catData: Omit<Category, 'id' | 'createdAt'>): Promise<Category> => {
     if (!user) throw new Error('User not logged in');
     const newCategory: Category = {
       ...catData,
       id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      userId: user.id,
       createdAt: new Date().toISOString(),
     };
     const updated = [...categories, newCategory];
     setCategories(updated);
     setStoredCategories(user.id, updated);
 
-    // Persist to MongoDB in background
-    fetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...newCategory, userId: user.id }),
-    }).catch(() => {});
+    // Save to Firestore
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      try {
+        await saveCategoryToFirestore(user.id, newCategory);
+      } catch (err) {
+        console.warn('Failed to sync added category to Firestore', err);
+      }
+    }
 
     return newCategory;
   };
 
-  const updateCategory = (id: string, updates: Partial<Category>) => {
+  const updateCategory = async (id: string, updates: Partial<Category>): Promise<void> => {
     if (!user) return;
-    const updated = categories.map((cat) => (cat.id === id ? { ...cat, ...updates } : cat));
+    const updated = categories.map((c) => (c.id === id ? { ...c, ...updates } : c));
     setCategories(updated);
     setStoredCategories(user.id, updated);
 
-    const changed = updated.find((c) => c.id === id);
-    if (changed) {
-      fetch('/api/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...changed, userId: user.id }),
-      }).catch(() => {});
+    const target = updated.find((c) => c.id === id);
+    if (target && auth.currentUser && auth.currentUser.uid === user.id) {
+      try {
+        await saveCategoryToFirestore(user.id, target);
+      } catch (err) {
+        console.warn('Failed to sync updated category to Firestore', err);
+      }
     }
   };
 
-  const deleteCategory = (id: string): { success: boolean; reason?: string } => {
+  const deleteCategory = async (id: string): Promise<{ success: boolean; reason?: string }> => {
     if (!user) return { success: false, reason: 'Not logged in' };
     const hasExpenses = expenses.some((e) => e.categoryId === id);
     if (hasExpenses) {
-      return {
-        success: false,
-        reason: 'This category is used by existing expenses. Please reassign or delete those expenses first.',
-      };
+      return { success: false, reason: 'Category has associated expenses. Reassign or delete expenses first.' };
     }
+
     const updated = categories.filter((c) => c.id !== id);
     setCategories(updated);
     setStoredCategories(user.id, updated);
 
-    // Delete in MongoDB
-    fetch(`/api/categories/${id}?userId=${user.id}`, { method: 'DELETE' }).catch(() => {});
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      try {
+        await deleteCategoryFromFirestore(user.id, id);
+      } catch (err) {
+        console.warn('Failed to delete category from Firestore', err);
+      }
+    }
 
     return { success: true };
   };
 
-  const addExpense = (expData: Omit<Expense, 'id' | 'userId' | 'createdAt'>): Expense => {
+  const addExpense = async (expData: Omit<Expense, 'id' | 'userId' | 'createdAt'>): Promise<Expense> => {
     if (!user) throw new Error('User not logged in');
     const newExpense: Expense = {
       ...expData,
@@ -242,74 +471,171 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setExpenses(updated);
     setStoredExpenses(user.id, updated);
 
-    // Persist to MongoDB in background
-    fetch('/api/expenses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newExpense),
-    }).catch(() => {});
+    // Save to Firestore
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      try {
+        await saveExpenseToFirestore(user.id, newExpense);
+      } catch (err) {
+        console.warn('Failed to sync added expense to Firestore', err);
+      }
+    }
 
     return newExpense;
   };
 
-  const updateExpense = (id: string, updates: Partial<Expense>) => {
+  const updateExpense = async (id: string, updates: Partial<Expense>): Promise<void> => {
     if (!user) return;
-    const updated = expenses.map((exp) => (exp.id === id ? { ...exp, ...updates } : exp));
+    const updated = expenses.map((e) => (e.id === id ? { ...e, ...updates } : e));
     setExpenses(updated);
     setStoredExpenses(user.id, updated);
 
-    const changed = updated.find((e) => e.id === id);
-    if (changed) {
-      fetch('/api/expenses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(changed),
-      }).catch(() => {});
+    const target = updated.find((e) => e.id === id);
+    if (target && auth.currentUser && auth.currentUser.uid === user.id) {
+      try {
+        await saveExpenseToFirestore(user.id, target);
+      } catch (err) {
+        console.warn('Failed to sync updated expense to Firestore', err);
+      }
     }
   };
 
-  const deleteExpense = (id: string) => {
+  const deleteExpense = async (id: string): Promise<void> => {
     if (!user) return;
-    const updated = expenses.filter((exp) => exp.id !== id);
+    const updated = expenses.filter((e) => e.id !== id);
     setExpenses(updated);
     setStoredExpenses(user.id, updated);
 
-    // Delete in MongoDB
-    fetch(`/api/expenses/${id}?userId=${user.id}`, { method: 'DELETE' }).catch(() => {});
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      try {
+        await deleteExpenseFromFirestore(user.id, id);
+      } catch (err) {
+        console.warn('Failed to delete expense from Firestore', err);
+      }
+    }
   };
 
-  const syncWithMongo = async (): Promise<boolean> => {
+  const syncWithFirebase = async (): Promise<boolean> => {
+    if (!user || !auth.currentUser) return false;
+    setFirebaseStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      await saveUserToFirestore(user);
+      for (const cat of categories) {
+        await saveCategoryToFirestore(user.id, cat);
+      }
+      for (const exp of expenses) {
+        await saveExpenseToFirestore(user.id, exp);
+      }
+      setFirebaseStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        lastSyncedAt: new Date().toLocaleTimeString(),
+      }));
+      return true;
+    } catch (err: any) {
+      setFirebaseStatus((prev) => ({ ...prev, isSyncing: false, error: err.message }));
+      return false;
+    }
+  };
+
+  const seedDemoDataHandler = async () => {
+    if (!user) return;
+    const seeded = seedInitialDemoData(user.id);
+    setCategories(seeded.categories);
+    setExpenses(seeded.expenses);
+    setStoredCategories(user.id, seeded.categories);
+    setStoredExpenses(user.id, seeded.expenses);
+
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      await syncWithFirebase();
+    }
+  };
+
+  const clearUserData = async (clearCategories: boolean = false): Promise<void> => {
+    if (!user) return;
+    const currentExpenses = [...expenses];
+    const currentCategories = [...categories];
+
+    setExpenses([]);
+    setStoredExpenses(user.id, []);
+
+    if (clearCategories) {
+      setCategories([]);
+      setStoredCategories(user.id, []);
+    }
+
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      try {
+        for (const exp of currentExpenses) {
+          await deleteExpenseFromFirestore(user.id, exp.id).catch(() => {});
+        }
+        if (clearCategories) {
+          for (const cat of currentCategories) {
+            await deleteCategoryFromFirestore(user.id, cat.id).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to clear user data from Firestore', err);
+      }
+    }
+  };
+
+  const exportExcel = (filteredOnly: boolean = false) => {
+    if (!user) return;
+    const targetExpenses = filteredOnly ? filteredExpenses : expenses;
+    exportToExcel(
+      targetExpenses,
+      categories,
+      user,
+      filteredOnly ? 'expenza_filtered_transactions' : 'expenza_all_transactions'
+    );
+  };
+
+  const exportBackup = () => {
+    if (!user) return;
+    exportDataBackup(user, categories, expenses);
+  };
+
+  const importBackup = async (backupData: ExpenzaBackupData): Promise<boolean> => {
     if (!user) return false;
     try {
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          categories,
-          expenses,
-          user,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        await checkDbStatus();
-        return Boolean(data.synced);
+      const importedCategories = backupData.categories.map((c) => ({
+        ...c,
+        userId: user.id,
+      }));
+      const importedExpenses = backupData.expenses.map((e) => ({
+        ...e,
+        userId: user.id,
+      }));
+
+      setCategories(importedCategories);
+      setExpenses(importedExpenses);
+      setStoredCategories(user.id, importedCategories);
+      setStoredExpenses(user.id, importedExpenses);
+
+      if (backupData.user.currency || backupData.user.monthlyBudget) {
+        await updateUserPreferences({
+          currency: backupData.user.currency || user.currency,
+          monthlyBudget: backupData.user.monthlyBudget || user.monthlyBudget,
+        });
       }
-      return false;
-    } catch {
+
+      if (auth.currentUser && auth.currentUser.uid === user.id) {
+        await syncWithFirebase();
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Import failed', err);
       return false;
     }
   };
 
   const resetFilters = () => {
-    const today = getTodayDateString();
-    const d = new Date();
     setFilterState({
       periodType: 'month',
-      selectedDate: today,
-      selectedMonth: d.getMonth(),
-      selectedYear: d.getFullYear(),
+      selectedDate: initialToday,
+      selectedMonth: initialDateObj.getMonth(),
+      selectedYear: initialDateObj.getFullYear(),
       startDate: '',
       endDate: '',
       selectedCategoryIds: [],
@@ -319,118 +645,59 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const seedDemoDataHandler = () => {
-    if (!user) return;
-    const { categories: newCats, expenses: newExps } = seedInitialDemoData(user.id);
-    setCategories(newCats);
-    setExpenses(newExps);
-  };
-
-  const clearUserData = () => {
-    if (!user) return;
-    setCategories([]);
-    setExpenses([]);
-    setStoredCategories(user.id, []);
-    setStoredExpenses(user.id, []);
-  };
-
-  const exportBackup = () => {
-    if (!user) return;
-    exportDataBackup(user, categories, expenses);
-  };
-
-  const importBackup = (backupData: any): boolean => {
-    if (!user || !backupData) return false;
-    try {
-      if (Array.isArray(backupData.categories)) {
-        setCategories(backupData.categories);
-        setStoredCategories(user.id, backupData.categories);
-      }
-      if (Array.isArray(backupData.expenses)) {
-        setExpenses(backupData.expenses);
-        setStoredExpenses(user.id, backupData.expenses);
-      }
-      if (backupData.user && backupData.user.currency) {
-        updateUserPreferences({
-          currency: backupData.user.currency,
-          monthlyBudget: backupData.user.monthlyBudget,
-        });
-      }
-      return true;
-    } catch (err) {
-      console.error('Failed to import backup:', err);
-      return false;
-    }
-  };
-
-  // Filter and sort expenses
   const filteredExpenses = useMemo(() => {
     return expenses.filter((exp) => {
-      // 1. Period filter
-      if (filterState.periodType === 'day') {
-        if (exp.date !== filterState.selectedDate) return false;
-      } else if (filterState.periodType === 'month') {
-        const [y, m] = exp.date.split('-').map(Number);
-        if (y !== filterState.selectedYear || m - 1 !== filterState.selectedMonth) {
-          return false;
-        }
-      } else if (filterState.periodType === 'year') {
-        const [y] = exp.date.split('-').map(Number);
-        if (y !== filterState.selectedYear) return false;
-      } else if (filterState.periodType === 'range') {
-        if (filterState.startDate && exp.date < filterState.startDate) return false;
-        if (filterState.endDate && exp.date > filterState.endDate) return false;
+      if (filterState.selectedCategoryIds.length > 0) {
+        if (!filterState.selectedCategoryIds.includes(exp.categoryId)) return false;
       }
-
-      // 2. Category filter
-      if (
-        filterState.selectedCategoryIds.length > 0 &&
-        !filterState.selectedCategoryIds.includes(exp.categoryId)
-      ) {
-        return false;
-      }
-
-      // 3. Payment method filter
       if (filterState.paymentMethod && exp.paymentMethod !== filterState.paymentMethod) {
         return false;
       }
-
-      // 4. Search query
       if (filterState.searchQuery.trim()) {
         const query = filterState.searchQuery.toLowerCase();
-        const titleMatch = exp.title.toLowerCase().includes(query);
-        const notesMatch = exp.notes?.toLowerCase().includes(query);
-        const refMatch = exp.receiptNumber?.toLowerCase().includes(query);
-        if (!titleMatch && !notesMatch && !refMatch) return false;
+        const matchesTitle = exp.title.toLowerCase().includes(query);
+        const matchesNotes = exp.notes?.toLowerCase().includes(query);
+        const matchesRef = exp.reference?.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesNotes && !matchesRef) return false;
       }
 
+      const expDate = new Date(exp.date + 'T00:00:00');
+
+      if (filterState.periodType === 'day') {
+        return exp.date === filterState.selectedDate;
+      }
+      if (filterState.periodType === 'month') {
+        return (
+          expDate.getMonth() === filterState.selectedMonth &&
+          expDate.getFullYear() === filterState.selectedYear
+        );
+      }
+      if (filterState.periodType === 'year') {
+        return expDate.getFullYear() === filterState.selectedYear;
+      }
+      if (filterState.periodType === 'range') {
+        if (filterState.startDate && exp.date < filterState.startDate) return false;
+        if (filterState.endDate && exp.date > filterState.endDate) return false;
+        return true;
+      }
       return true;
     }).sort((a, b) => {
-      if (filterState.sortBy === 'date_desc') {
-        return b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '');
-      }
-      if (filterState.sortBy === 'date_asc') {
-        return a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '');
-      }
-      if (filterState.sortBy === 'amount_desc') {
-        return b.amount - a.amount;
-      }
-      if (filterState.sortBy === 'amount_asc') {
-        return a.amount - b.amount;
-      }
+      if (filterState.sortBy === 'date_desc') return b.date.localeCompare(a.date);
+      if (filterState.sortBy === 'date_asc') return a.date.localeCompare(b.date);
+      if (filterState.sortBy === 'amount_desc') return b.amount - a.amount;
+      if (filterState.sortBy === 'amount_asc') return a.amount - b.amount;
       return 0;
     });
   }, [expenses, filterState]);
 
   const totalFilteredAmount = useMemo(() => {
-    return filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+    return filteredExpenses.reduce((sum, item) => sum + item.amount, 0);
   }, [filteredExpenses]);
 
   const averageDailyAmount = useMemo(() => {
     if (filteredExpenses.length === 0) return 0;
-    const uniqueDates = new Set(filteredExpenses.map((e) => e.date));
-    const dayCount = Math.max(uniqueDates.size, 1);
-    return totalFilteredAmount / dayCount;
+    const uniqueDays = new Set(filteredExpenses.map((e) => e.date)).size;
+    return uniqueDays > 0 ? totalFilteredAmount / uniqueDays : 0;
   }, [filteredExpenses, totalFilteredAmount]);
 
   const currency = user?.currency || '$';
@@ -441,8 +708,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         user,
         setUser,
         logout,
-        dbStatus,
-        syncWithMongo,
+        signInWithGoogle,
+        signUpWithEmail,
+        signInWithEmail,
+        sendPasswordReset,
+        firebaseStatus,
+        syncWithFirebase,
         categories,
         addCategory,
         updateCategory,
@@ -461,6 +732,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateUserPreferences,
         seedDemoDataHandler,
         clearUserData,
+        exportExcel,
         exportBackup,
         importBackup,
         activeTab,

@@ -24,7 +24,14 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   onEditExpense,
   onOpenCreateCategory,
 }) => {
-  const { filteredExpenses, categories, currency, filterState, seedDemoDataHandler } = useApp();
+  const {
+    filteredExpenses,
+    categories,
+    currency,
+    filterState,
+    seedDemoDataHandler,
+    exportExcel,
+  } = useApp();
   const [groupByDate, setGroupByDate] = useState(true);
 
   // CSV export handler
@@ -111,16 +118,29 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             {groupByDate ? 'Grouped by Day' : 'Flat List'}
           </button>
 
+          {/* Download in Excel (.xlsx) */}
+          {filteredExpenses.length > 0 && (
+            <button
+              type="button"
+              onClick={() => exportExcel(true)}
+              title="Download filtered expenses in Microsoft Excel format (.xlsx)"
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 hover:text-emerald-200 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm group"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span>Download Excel</span>
+            </button>
+          )}
+
           {/* Export to CSV */}
           {filteredExpenses.length > 0 && (
             <button
               type="button"
               onClick={exportToCSV}
               title="Export to CSV"
-              className="px-3 py-1.5 rounded-xl bg-[#18181c] hover:bg-[#222228] border border-neutral-800 text-neutral-300 hover:text-[#00FF66] text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-[#18181c] hover:bg-[#222228] border border-neutral-800 text-neutral-300 hover:text-white text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export CSV</span>
+              <span>CSV</span>
             </button>
           )}
 
@@ -142,9 +162,13 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
           <div className="w-12 h-12 rounded-2xl bg-neutral-800/60 flex items-center justify-center text-neutral-400 mb-3">
             <Receipt className="w-6 h-6 text-[#00FF66]" />
           </div>
-          <h4 className="text-base font-bold text-white mb-1">No Expenses Found</h4>
+          <h4 className="text-base font-bold text-white mb-1">
+            {categories.length === 0 ? 'Your Clean Ledger is Ready' : 'No Expenses Found'}
+          </h4>
           <p className="text-xs text-neutral-400 max-w-sm mb-5">
-            There are no expenses logged for the current period or search filters.
+            {categories.length === 0
+              ? 'Start by adding your own custom category or logging your first real transaction. Data will be saved directly to your cloud profile.'
+              : 'There are no expenses logged for the current period or search filters.'}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
@@ -153,15 +177,25 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               className="px-4 py-2 bg-[#00FF66] hover:bg-[#10f06a] text-black font-bold text-xs rounded-xl shadow-md glow-neon-sm transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Log Expense for this Date</span>
+              <span>{categories.length === 0 ? 'Log First Expense' : 'Log Expense for this Date'}</span>
             </button>
+            {categories.length === 0 && (
+              <button
+                type="button"
+                onClick={onOpenCreateCategory}
+                className="px-3.5 py-2 bg-[#18181c] hover:bg-[#202026] border border-neutral-800 text-xs text-neutral-300 hover:text-white rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#00FF66]" />
+                <span>Create Custom Category</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={seedDemoDataHandler}
-              className="px-3.5 py-2 bg-[#18181c] hover:bg-[#202026] border border-neutral-800 text-xs text-neutral-300 hover:text-white rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-2 bg-transparent hover:bg-neutral-800/50 text-[11px] text-neutral-500 hover:text-neutral-300 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-[#00FF66]" />
-              <span>Load Sample Expenses</span>
+              <Sparkles className="w-3 h-3 text-neutral-400" />
+              <span>Load Sample Template (Optional)</span>
             </button>
           </div>
         </div>
